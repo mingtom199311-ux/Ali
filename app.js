@@ -6,6 +6,7 @@
   const total = slides.length;
   let currentIndex = Math.max(0, Math.min(total - 1, Number(location.hash.slice(1)) - 1 || 0));
   let transitioning = false;
+  let transitionTimer = null;
   let touchStartX = null;
   let toastTimer = null;
   let audioContext = null;
@@ -122,12 +123,20 @@
     const state = taskStates[currentIndex];
     const complete = taskIsComplete(currentIndex);
     const done = state.completed.size;
+    const nextSlideButton = document.getElementById("nextSlide");
     coachPanel.classList.toggle("is-complete", complete);
     coachPrompt.textContent = complete ? state.config.done : state.config.prompt;
     coachStatus.textContent = complete ? `完成 ${done} / ${state.targets.length}` : `请点击 · ${done} / ${state.targets.length}`;
     coachSkip.hidden = complete;
     coachNext.disabled = !complete;
-    coachNext.textContent = currentIndex === total - 1 && complete ? "重新体验 ↺" : complete ? "继续下一页 →" : "完成后继续";
+    coachNext.textContent = currentIndex === total - 1 && complete
+      ? "重新体验 ↺"
+      : complete
+        ? `进入第 ${String(currentIndex + 2).padStart(2, "0")} 页 →`
+        : "完成后继续";
+    coachNext.setAttribute("aria-label", complete ? coachNext.textContent : "请先完成本页点击任务");
+    nextSlideButton.classList.toggle("is-ready", complete);
+    nextSlideButton.title = complete ? "本页已完成，进入下一页" : "请先完成本页点击任务";
     updateTargetHints(currentIndex);
   }
 
@@ -143,7 +152,14 @@
     const complete = taskIsComplete(index);
     if (complete) slides[index].classList.add("is-task-complete");
     playSound(complete ? "success" : "reveal");
-    if (index === currentIndex) updateCoach();
+    if (index === currentIndex) {
+      updateCoach();
+      if (complete) {
+        coachNext.classList.remove("is-inviting");
+        void coachNext.offsetWidth;
+        coachNext.classList.add("is-inviting");
+      }
+    }
   }
 
   function handleTaskActivation(index, position, event) {
@@ -192,7 +208,9 @@
       showToast("本页已标记完成，可以继续");
     });
 
-    coachNext.addEventListener("click", () => {
+    coachNext.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
       if (currentIndex === total - 1 && taskIsComplete(currentIndex)) {
         location.hash = "#1";
         location.reload();
@@ -220,24 +238,28 @@
   }
 
   function showSlide(nextIndex, direction = 1, initial = false) {
-    if (transitioning) return;
     const bounded = Math.max(0, Math.min(total - 1, nextIndex));
     if (bounded === currentIndex && !initial) return;
     const oldSlide = slides[currentIndex];
     const nextSlide = slides[bounded];
+    if (transitionTimer !== null) {
+      clearTimeout(transitionTimer);
+      transitionTimer = null;
+    }
     transitioning = true;
     slides.forEach(slide => slide.classList.remove("is-active", "is-leaving-left", "is-leaving-right"));
-    if (!initial) oldSlide.classList.add(direction > 0 ? "is-leaving-left" : "is-leaving-right");
+    if (!initial && oldSlide !== nextSlide) oldSlide.classList.add(direction > 0 ? "is-leaving-left" : "is-leaving-right");
     currentIndex = bounded;
     nextSlide.classList.add("is-active");
     updateChrome();
     if (!initial) playSound(direction > 0 ? "page" : "back");
-    setTimeout(() => {
+    transitionTimer = setTimeout(() => {
       slides.forEach((slide, index) => {
         slide.classList.toggle("is-active", index === currentIndex);
         slide.classList.remove("is-leaving-left", "is-leaving-right");
       });
       transitioning = false;
+      transitionTimer = null;
     }, initial ? 20 : 430);
   }
 
@@ -441,3 +463,4 @@
   bindChecklist();
   showSlide(currentIndex, 1, true);
 })();
+
