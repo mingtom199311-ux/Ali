@@ -228,7 +228,16 @@
     progressBar.style.width = `${((currentIndex + 1) / total) * 100}%`;
     stage.classList.toggle("is-cover", currentIndex === 0);
     document.title = `${slide.dataset.title}｜阿狸老师的作文小教室`;
-    if (location.hash !== `#${currentIndex + 1}`) history.replaceState(null, "", `#${currentIndex + 1}`);
+    const targetHash = `#${currentIndex + 1}`;
+    if (location.hash !== targetHash) {
+      try {
+        history.replaceState(null, "", targetHash);
+      } catch {
+        // HTMLPreview 等公网代理会把文档基地址保留为 raw.githubusercontent.com，
+        // 此时 replaceState 会触发跨源异常。退回普通 hash 更新，不能让导航栏停止刷新。
+        location.hash = targetHash;
+      }
+    }
     notesTitle.textContent = slide.dataset.title || "讲者备注";
     notesTime.textContent = slide.dataset.time || "";
     const note = slide.querySelector("template.speaker-note");
@@ -463,4 +472,3 @@
   bindChecklist();
   showSlide(currentIndex, 1, true);
 })();
-
