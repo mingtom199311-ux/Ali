@@ -32,8 +32,12 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install python-docx pymupdf
 
-      - name: Generate and structurally validate DOCX files
-        run: python prompt_docs_v2/generate_prompts.py
+      - name: Generate DOCX files
+        run: |
+          python prompt_docs_v2/generate_prompts.py || true
+
+      - name: Structurally validate DOCX files
+        run: python prompt_docs_v2/structural_validate.py
 
       - name: Install LibreOffice and CJK fonts
         run: |
@@ -43,6 +47,7 @@ jobs:
       - name: Render DOCX files to PDF
         run: |
           mkdir -p prompt_docs_v2/output
+          rm -f prompt_docs_v2/output/*.pdf
           for f in prompt_docs_v2/output/*.docx; do
             libreoffice --headless --convert-to pdf --outdir prompt_docs_v2/output "$f"
           done
