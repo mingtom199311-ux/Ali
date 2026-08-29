@@ -1,0 +1,79 @@
+name: Verify direct DOCX artifact archives
+
+on:
+  push:
+    branches:
+      - chatgpt-prompt-docx-20260829
+    paths:
+      - ".github/workflows/verify-direct-docx-artifacts.yml"
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: chatgpt-prompt-docx-20260829
+          fetch-depth: 0
+
+      - name: Install validation tools
+        run: |
+          python -m pip install python-docx
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libreoffice-writer poppler-utils fonts-noto-cjk
+
+      - name: Download exact artifact archives and validate as DOCX
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p direct_verified rendered_direct
+          curl -L --fail -H "Authorization: Bearer ${GH_TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/9717384439/zip" \
+            -o "direct_verified/高考日语新题型配套解析最终Prompt（含标音版）.docx"
+          curl -L --fail -H "Authorization: Bearer ${GH_TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/9717384576/zip" \
+            -o "direct_verified/高考日语新题型配套解析最终Prompt（不含标音版）.docx"
+          unzip -t "direct_verified/高考日语新题型配套解析最终Prompt（含标音版）.docx"
+          unzip -t "direct_verified/高考日语新题型配套解析最终Prompt（不含标音版）.docx"
+          python - <<'PY'
+          from pathlib import Path
+          from docx import Document
+          files = [
+              Path('direct_verified/高考日语新题型配套解析最终Prompt（含标音版）.docx'),
+              Path('direct_verified/高考日语新题型配套解析最终Prompt（不含标音版）.docx'),
+          ]
+          for path in files:
+              doc = Document(path)
+              text = '\n'.join(p.text for p in doc.paragraphs)
+              assert '高考日语新题型配套解析最终' in text, path
+              assert '开始执行指令' in text, path
+              assert len(text) > 7000, (path, len(text))
+              print(path.name, path.stat().st_size, len(text), 'PASS')
+          PY
+          for f in direct_verified/*.docx; do
+            libreoffice --headless --convert-to pdf --outdir rendered_direct "$f"
+          done
+          test "$(find rendered_direct -name '*.pdf' | wc -l)" -eq 2
+          for pdf in rendered_direct/*.pdf; do
+            pdfinfo "$pdf" | grep -E '^(Pages|Page size):'
+          done
+
+      - name: Commit exact verified direct-download DOCX archives
+        run: |
+          git config user.name "chatgpt-doc-builder"
+          git config user.email "chatgpt-doc-builder@users.noreply.github.com"
+          git add direct_verified/*.docx
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Add exact independently downloadable verified prompt DOCX files [skip ci]"
+            git push origin chatgpt-prompt-docx-20260829
+          fi
