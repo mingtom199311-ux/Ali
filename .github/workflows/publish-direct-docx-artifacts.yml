@@ -1,0 +1,57 @@
+name: Publish independently downloadable final DOCX packages
+
+on:
+  push:
+    branches:
+      - chatgpt-prompt-docx-20260829
+    paths:
+      - ".github/workflows/publish-direct-docx-artifacts.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out generated documents
+        uses: actions/checkout@v4
+        with:
+          ref: chatgpt-prompt-docx-20260829
+
+      - name: Expand each DOCX package at artifact root
+        run: |
+          set -euo pipefail
+          mkdir -p artifact_packages/with_ruby artifact_packages/without_ruby
+          unzip -q "deliverables_v2/高考日语新题型配套解析最终Prompt（含标音版）.docx" -d artifact_packages/with_ruby
+          unzip -q "deliverables_v2/高考日语新题型配套解析最终Prompt（不含标音版）.docx" -d artifact_packages/without_ruby
+          test -f artifact_packages/with_ruby/'[Content_Types].xml'
+          test -f artifact_packages/with_ruby/word/document.xml
+          test -f artifact_packages/without_ruby/'[Content_Types].xml'
+          test -f artifact_packages/without_ruby/word/document.xml
+          (cd artifact_packages/with_ruby && zip -q -r /tmp/repacked_with_ruby.docx .)
+          (cd artifact_packages/without_ruby && zip -q -r /tmp/repacked_without_ruby.docx .)
+          unzip -t /tmp/repacked_with_ruby.docx
+          unzip -t /tmp/repacked_without_ruby.docx
+
+      - name: Upload direct DOCX package — with ruby prompt
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-prompt-with-ruby-direct-docx
+          path: artifact_packages/with_ruby/
+          include-hidden-files: true
+          compression-level: 6
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload direct DOCX package — without ruby prompt
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-prompt-without-ruby-direct-docx
+          path: artifact_packages/without_ruby/
+          include-hidden-files: true
+          compression-level: 6
+          if-no-files-found: error
+          retention-days: 7
