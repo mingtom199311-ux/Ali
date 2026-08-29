@@ -1,0 +1,84 @@
+name: Build reusable Japanese exam analysis prompt DOCX
+
+on:
+  push:
+    branches:
+      - chatgpt-prompt-docx-20260829
+    paths:
+      - "prompt_docs_sources/**"
+      - "scripts/build_prompt_docs.py"
+      - ".github/workflows/build-prompt-docs.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: chatgpt-prompt-docx-20260829
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install document tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install python-docx lxml
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libreoffice-writer poppler-utils fonts-noto-cjk
+
+      - name: Build DOCX files and run structural validation
+        run: |
+          python scripts/build_prompt_docs.py
+          ls -lh deliverables
+
+      - name: Render DOCX to PDF for visual-layout validation
+        run: |
+          mkdir -p deliverables/rendered
+          for f in deliverables/*.docx; do
+            libreoffice --headless --convert-to pdf --outdir deliverables/rendered "$f"
+          done
+          for f in deliverables/rendered/*.pdf; do
+            pdfinfo "$f" | tee -a deliverables/validation_report.txt
+            base="${f%.pdf}"
+            pdftoppm -f 1 -singlefile -png -r 120 "$f" "${base}-page1"
+          done
+          test $(find deliverables/rendered -name '*.pdf' | wc -l) -eq 2
+          test $(find deliverables/rendered -name '*-page1.png' | wc -l) -eq 2
+
+      - name: Re-open generated DOCX files after rendering
+        run: |
+          python scripts/build_prompt_docs.py --validate-only
+
+      - name: Commit final Word documents to branch
+        run: |
+          git config user.name "chatgpt-doc-builder"
+          git config user.email "chatgpt-doc-builder@users.noreply.github.com"
+          git add deliverables/*.docx deliverables/validation_report.txt
+          if git diff --cached --quiet; then
+            echo "No output changes to commit"
+          else
+            git commit -m "Build final reusable Japanese exam analysis prompt DOCX files [skip ci]"
+            git push origin chatgpt-prompt-docx-20260829
+          fi
+
+      - name: Upload validation package
+        uses: actions/upload-artifact@v4
+        with:
+          name: reusable-japanese-exam-analysis-prompts
+          path: |
+            deliverables/*.docx
+            deliverables/validation_report.txt
+            deliverables/rendered/*.pdf
+            deliverables/rendered/*-page1.png
+          if-no-files-found: error
+          retention-days: 7
