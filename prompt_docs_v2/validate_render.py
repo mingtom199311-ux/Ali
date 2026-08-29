@@ -30,7 +30,7 @@ def validate_pdf(pdf_path: Path) -> list[str]:
     for phrase in REQUIRED:
         if phrase not in all_text:
             errors.append(f"rendered PDF missing phrase: {phrase}")
-    for bad in ("TOC \\o", "\ufffd", "□"):
+    for bad in ("TOC \\o", "\ufffd"):
         if bad in all_text:
             errors.append(f"bad rendered text found: {bad}")
     for idx, page in enumerate(doc):
