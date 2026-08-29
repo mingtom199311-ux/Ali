@@ -1,0 +1,70 @@
+name: Build final Japanese prompt DOCX files
+
+on:
+  push:
+    branches:
+      - chatgpt-prompt-docx-20260829
+    paths:
+      - 'prompt_docs_v2/**.md'
+      - 'prompt_docs_v2/**.py'
+      - '.github/workflows/build-final-prompts.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: chatgpt-prompt-docx-20260829
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install python-docx pymupdf
+
+      - name: Generate and structurally validate DOCX files
+        run: python prompt_docs_v2/generate_prompts.py
+
+      - name: Install LibreOffice and CJK fonts
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y libreoffice-writer fonts-noto-cjk
+
+      - name: Render DOCX files to PDF
+        run: |
+          mkdir -p prompt_docs_v2/output
+          for f in prompt_docs_v2/output/*.docx; do
+            libreoffice --headless --convert-to pdf --outdir prompt_docs_v2/output "$f"
+          done
+
+      - name: Validate rendered pages and create previews
+        run: python prompt_docs_v2/validate_render.py
+
+      - name: Commit generated files and validation reports
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add prompt_docs_v2/output prompt_docs_v2/preview
+          if ! git diff --cached --quiet; then
+            git commit -m "Generate final reusable Japanese prompt DOCX files"
+            git push origin HEAD:chatgpt-prompt-docx-20260829
+          fi
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-japanese-prompt-docx
+          path: |
+            prompt_docs_v2/output/*.docx
+            prompt_docs_v2/output/*validation_report.txt
+            prompt_docs_v2/preview/*.png
