@@ -1,0 +1,95 @@
+name: Build final reusable Japanese exam prompt DOCX v2
+
+on:
+  push:
+    branches:
+      - chatgpt-prompt-docx-20260829
+    paths:
+      - "prompt_docs_sources/**"
+      - "scripts/build_prompt_docs_v2.py"
+      - ".github/workflows/build-prompt-docs-v2.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: chatgpt-prompt-docx-20260829
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install document and rendering tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install python-docx lxml Pillow
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libreoffice-writer poppler-utils fonts-noto-cjk
+
+      - name: Build DOCX files and validate package structure
+        run: |
+          python scripts/build_prompt_docs_v2.py
+          ls -lh deliverables_v2
+
+      - name: Render all documents and inspect page geometry
+        run: |
+          mkdir -p deliverables_v2/rendered
+          for f in deliverables_v2/*.docx; do
+            libreoffice --headless --convert-to pdf --outdir deliverables_v2/rendered "$f"
+          done
+          test "$(find deliverables_v2/rendered -maxdepth 1 -name '*.pdf' | wc -l)" -eq 2
+          for pdf in deliverables_v2/rendered/*.pdf; do
+            pdfinfo "$pdf" | tee -a deliverables_v2/validation_report.txt
+            pages=$(pdfinfo "$pdf" | awk '/^Pages:/ {print $2}')
+            test "$pages" -ge 8
+            mid=$(( (pages + 1) / 2 ))
+            base="${pdf%.pdf}"
+            pdftoppm -f 1 -singlefile -png -r 110 "$pdf" "${base}-first"
+            pdftoppm -f "$mid" -singlefile -png -r 110 "$pdf" "${base}-middle"
+            pdftoppm -f "$pages" -singlefile -png -r 110 "$pdf" "${base}-last"
+            pdftotext "$pdf" "${base}.txt"
+            grep -q "高考日语新题型配套解析最终" "${base}.txt"
+            grep -q "开始执行指令" "${base}.txt"
+          done
+          test "$(find deliverables_v2/rendered -maxdepth 1 -name '*-first.png' | wc -l)" -eq 2
+          test "$(find deliverables_v2/rendered -maxdepth 1 -name '*-middle.png' | wc -l)" -eq 2
+          test "$(find deliverables_v2/rendered -maxdepth 1 -name '*-last.png' | wc -l)" -eq 2
+
+      - name: Re-open generated DOCX files after rendering
+        run: python scripts/build_prompt_docs_v2.py --validate-only
+
+      - name: Commit final Word documents and visual previews
+        run: |
+          git config user.name "chatgpt-doc-builder"
+          git config user.email "chatgpt-doc-builder@users.noreply.github.com"
+          git add deliverables_v2/*.docx deliverables_v2/validation_report.txt deliverables_v2/rendered/*.pdf deliverables_v2/rendered/*-first.png deliverables_v2/rendered/*-middle.png deliverables_v2/rendered/*-last.png
+          if git diff --cached --quiet; then
+            echo "No output changes to commit"
+          else
+            git commit -m "Build final reusable Japanese exam analysis prompt documents [skip ci]"
+            git push origin chatgpt-prompt-docx-20260829
+          fi
+
+      - name: Upload validation package
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-reusable-japanese-exam-analysis-prompts-v2
+          path: |
+            deliverables_v2/*.docx
+            deliverables_v2/validation_report.txt
+            deliverables_v2/rendered/*.pdf
+            deliverables_v2/rendered/*-first.png
+            deliverables_v2/rendered/*-middle.png
+            deliverables_v2/rendered/*-last.png
+          if-no-files-found: error
+          retention-days: 7
