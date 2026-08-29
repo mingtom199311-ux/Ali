@@ -36,6 +36,9 @@ jobs:
         run: |
           python prompt_docs_v2/generate_prompts.py || true
 
+      - name: Diagnose replacement characters
+        run: python prompt_docs_v2/debug_replacement.py
+
       - name: Structurally validate DOCX files
         run: python prompt_docs_v2/structural_validate.py
 
