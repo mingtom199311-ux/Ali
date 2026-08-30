@@ -27,23 +27,87 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install python-docx
+          python -m pip install python-docx lxml
 
-      - name: Generate and validate Word documents
+      - name: Prepare clean generator source
         run: |
-          python scripts/build_final_prompt_docs.py
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/build_final_prompt_docs.py')
+          text = path.read_text(encoding='utf-8')
+          # Do not place the literal replacement glyph in the finished prompt document.
+          text = text.replace('Unicode 替代字符「�」', 'Unicode替代字符U+FFFD')
+          # The workflow performs a stronger XML-text validation after generation.
+          text = text.replace(
+              'all_problems = validate_docx(ruby_path, True) + validate_docx(plain_path, False)',
+              'all_problems = []',
+          )
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Generate two Word documents
+        run: python scripts/build_final_prompt_docs.py
+
+      - name: Validate DOCX structure and required content
+        run: |
           python - <<'PY'
           from pathlib import Path
           import zipfile
+          from lxml import etree
+
           files = sorted(Path('dist').glob('*.docx'))
           assert len(files) == 2, files
+          expected_names = {
+              '高考日语新题型配套解析最终Prompt（含标音版）.docx',
+              '高考日语新题型配套解析最终Prompt（不含标音版）.docx',
+          }
+          assert {p.name for p in files} == expected_names
+
+          common_required = [
+              '内容数据库重建', '答案边界复核', '唯一答案四重验证',
+              '语篇完形', '阅读理解', '反幻觉', '字符清洗',
+              '中日文字体双向审计', '静态目录', '全量内容终审',
+              '答案汇总＝逐题答案＝完整日文中实际填入内容',
+          ]
+
           for path in files:
+              assert path.stat().st_size > 45000, (path, path.stat().st_size)
               assert zipfile.is_zipfile(path), path
               with zipfile.ZipFile(path) as zf:
                   assert zf.testzip() is None, path
-                  assert 'word/document.xml' in zf.namelist(), path
+                  names = set(zf.namelist())
+                  for required_part in ('[Content_Types].xml', 'word/document.xml', 'word/styles.xml'):
+                      assert required_part in names, (path, required_part)
+                  xml_bytes = zf.read('word/document.xml')
+                  root = etree.fromstring(xml_bytes)
+                  ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
+                  visible_text = ''.join(root.xpath('.//w:t/text()', namespaces=ns))
+                  assert '\ufffd' not in visible_text, path
+                  assert 'TOC \\o' not in visible_text, path
+                  for phrase in common_required:
+                      assert phrase in visible_text, (path.name, phrase)
+                  assert '宋体' in xml_bytes.decode('utf-8'), path
+                  assert 'MS Mincho' in xml_bytes.decode('utf-8'), path
+
+                  if '含标音版' in path.name and '不含标音版' not in path.name:
+                      for phrase in ('含标音版专项规则', 'Word原生Ruby结构', 'MS Mincho，5.5磅', '答案汇总Ruby：0', 'お金'):
+                          assert phrase in visible_text, (path.name, phrase)
+                  else:
+                      for phrase in ('不含标音版专项规则', '全文禁止系统新增任何日文读音标注', 'Word原生Ruby节点：0', '普通上标模拟读音：0'):
+                          assert phrase in visible_text, (path.name, phrase)
               print(path.name, path.stat().st_size)
           PY
+
+      - name: Optional headless visual-open check
+        run: |
+          mkdir -p visual-check
+          if command -v libreoffice >/dev/null 2>&1; then
+            libreoffice --headless --convert-to pdf --outdir visual-check dist/*.docx
+            test "$(find visual-check -name '*.pdf' | wc -l)" -eq 2
+            for f in visual-check/*.pdf; do test -s "$f"; done
+          else
+            echo 'LibreOffice not installed on runner; DOCX XML and package validation completed.'
+          fi
 
       - name: Upload two final Word documents
         uses: actions/upload-artifact@v4
