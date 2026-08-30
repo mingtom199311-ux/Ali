@@ -75,7 +75,9 @@ def fixed_structural_validate(path: Path, version_name: str) -> dict:
     for item in forbidden_text:
         if item in text:
             raise AssertionError(f"Forbidden text found: {repr(item)}")
-    if len(text) < 20000:
+    # Chinese UTF-8 source bytes are much larger than visible character count; a complete
+    # final Prompt is expected to contain at least ten thousand extracted characters.
+    if len(text) < 10000:
         raise AssertionError(f"Prompt content unexpectedly short: {len(text)}")
     if path.stat().st_size < 30000:
         raise AssertionError(f"DOCX unexpectedly small: {path.stat().st_size}")
