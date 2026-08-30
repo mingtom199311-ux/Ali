@@ -43,7 +43,7 @@ jobs:
 
       - name: Generate and fully validate both Word documents
         run: |
-          python prompt_builder_v2/generate_prompts.py --render
+          python prompt_builder_v2/run_generator_fixed.py --render
 
       - name: Show validation report
         run: |
