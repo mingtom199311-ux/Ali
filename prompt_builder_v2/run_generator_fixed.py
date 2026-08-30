@@ -38,7 +38,10 @@ def fixed_structural_validate(path: Path, version_name: str) -> dict:
         "独立答案",
         version_name,
     ]
-    forbidden_text = ["{{VERSION", "�", "\u200b"]
+    # Literal instructional mentions of malformed characters, Ruby tags and TOC syntax
+    # are allowed. Only unreplaced template placeholders and real zero-width characters
+    # are forbidden in the generated document text.
+    forbidden_text = ["{{VERSION", "\u200b"]
 
     with zipfile.ZipFile(path, "r") as zf:
         bad = zf.testzip()
