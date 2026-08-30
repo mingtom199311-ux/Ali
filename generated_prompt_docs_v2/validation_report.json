@@ -1,0 +1,44 @@
+{
+  "status": "pass",
+  "documents": [
+    {
+      "filename": "Gaokao_Japanese_New_Format_Analysis_Prompt_With_Ruby.docx",
+      "bytes": 56874,
+      "characters": 11952,
+      "required_markers": "pass",
+      "zip_integrity": "pass",
+      "font_declarations": "pass",
+      "active_ruby_nodes_in_prompt_document": 0,
+      "active_toc_fields": 0
+    },
+    {
+      "filename": "Gaokao_Japanese_New_Format_Analysis_Prompt_No_Ruby.docx",
+      "bytes": 55419,
+      "characters": 11176,
+      "required_markers": "pass",
+      "zip_integrity": "pass",
+      "font_declarations": "pass",
+      "active_ruby_nodes_in_prompt_document": 0,
+      "active_toc_fields": 0
+    }
+  ],
+  "render_validation": {
+    "status": "pass",
+    "documents": [
+      {
+        "filename": "Gaokao_Japanese_New_Format_Analysis_Prompt_With_Ruby.docx",
+        "pages": 18,
+        "all_pages_nonblank": true,
+        "min_text_chars": 151,
+        "min_ink_ratio": 0.018689
+      },
+      {
+        "filename": "Gaokao_Japanese_New_Format_Analysis_Prompt_No_Ruby.docx",
+        "pages": 17,
+        "all_pages_nonblank": true,
+        "min_text_chars": 181,
+        "min_ink_ratio": 0.022611
+      }
+    ]
+  }
+}
